@@ -188,6 +188,55 @@ class GachaAnalysis:
         
         return results
 
+    def calculate_theoretical_rates(self) -> dict:
+        """计算考虑保底机制的理论概率"""
+        # 使用动态规划计算五星的真实概率
+        dp = [[0.0 for _ in range(90)] for _ in range(1000)]  # 使用足够大的循环来达到稳态
+        dp[0][0] = 1.0  # 初始状态
+        
+        total_prob = 0
+        hits = 0
+        
+        # 模拟足够多次抽卡以达到稳态
+        for i in range(999):
+            for j in range(90):
+                if dp[i][j] == 0:
+                    continue
+                    
+                current_prob = self._calc_single_prob(j + 1)
+                # 没抽到五星
+                if j + 1 < 90:
+                    dp[i+1][j+1] += dp[i][j] * (1 - current_prob)
+                # 抽到五星，重置计数器
+                dp[i+1][0] += dp[i][j] * current_prob
+                
+                # 累积概率
+                total_prob += dp[i][j]
+                hits += dp[i][j] * current_prob
+        
+        # 计算真实的五星概率
+        real_five_star_rate = hits / total_prob
+        
+        # 计算四星的真实概率（考虑被五星挤压和保底）
+        real_four_star_rate = 0
+        for i in range(1, 11):
+            if i == 10:
+                # 第10抽保底
+                real_four_star_rate += (1 - real_five_star_rate)
+            else:
+                # 正常情况下的四星概率（考虑被五星挤压）
+                real_four_star_rate += max(min(1 - real_five_star_rate, self.base_four_star_prob), 0)
+        real_four_star_rate /= 10  # 取平均
+        
+        # 计算限定五星的理论概率（考虑大小保底）
+        real_limited_rate = real_five_star_rate * 0.75  # 考虑50/50和大保底的综合概率
+        
+        return {
+            'five_star_rate': real_five_star_rate,
+            'four_star_rate': real_four_star_rate,
+            'limited_rate': real_limited_rate
+        }
+
     def compare_theory_and_practice(self, experimental_data: dict) -> dict:
         """比较理论值和实验值"""
         total_pulls = experimental_data['total_pulls']
@@ -197,21 +246,19 @@ class GachaAnalysis:
         actual_four_star_rate = experimental_data['four_star_count'] / total_pulls
         actual_limited_rate = experimental_data['limited_five_star_count'] / total_pulls
         
-        # 计算理论概率
-        theory_five_star_rate = self.base_five_star_prob
-        theory_four_star_rate = self.base_four_star_prob
-        theory_limited_rate = self.base_five_star_prob * 0.75  # 考虑大小保底的综合概率
+        # 获取考虑保底的理论概率
+        theoretical_rates = self.calculate_theoretical_rates()
         
         return {
             '实验五星率': actual_five_star_rate,
-            '理论五星率': theory_five_star_rate,
+            '理论五星率': theoretical_rates['five_star_rate'],
             '实验四星率': actual_four_star_rate,
-            '理论四星率': theory_four_star_rate,
+            '理论四星率': theoretical_rates['four_star_rate'],
             '实验限定率': actual_limited_rate,
-            '理论限定率': theory_limited_rate,
-            '五星误差': abs(actual_five_star_rate - theory_five_star_rate) / theory_five_star_rate,
-            '四星误差': abs(actual_four_star_rate - theory_four_star_rate) / theory_four_star_rate,
-            '限定误差': abs(actual_limited_rate - theory_limited_rate) / theory_limited_rate
+            '理论限定率': theoretical_rates['limited_rate'],
+            '五星误差': abs(actual_five_star_rate - theoretical_rates['five_star_rate']) / theoretical_rates['five_star_rate'],
+            '四星误差': abs(actual_four_star_rate - theoretical_rates['four_star_rate']) / theoretical_rates['four_star_rate'],
+            '限定误差': abs(actual_limited_rate - theoretical_rates['limited_rate']) / theoretical_rates['limited_rate']
         }
 
 if __name__ == "__main__":
