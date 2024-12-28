@@ -207,7 +207,7 @@ class GachaAnalysis:
         dp[0][0] = 1.0  # 初始状态：小保底
         
         epsilon = 1e-10
-        max_iter = 1000
+        max_iter = 10000
         old_dp = [row[:] for row in dp]
         
         for _ in range(max_iter):
