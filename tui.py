@@ -121,6 +121,8 @@ class GachaTUI:
     def get_constellation_text(self, count):
         if count <= 6:
             return f"{count-1}命" if count > 1 else "0命"
+        elif count == 7:
+            return "满命"
         else:
             return f"满命溢出{count-7}只"
 
