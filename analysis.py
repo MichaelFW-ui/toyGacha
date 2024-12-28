@@ -133,7 +133,7 @@ class GachaAnalysis:
 
     def expected_pulls_theory(self) -> float:
         """理论计算期望抽数（考虑保底）"""
-        # 计算73抽之前的期望
+        # 计算单个五星的期望抽数（不考虑大小保底）
         exp_before_pity = 0
         prob_not_get = 1
         for i in range(1, self.step_up):
@@ -141,7 +141,6 @@ class GachaAnalysis:
             exp_before_pity += i * prob_get
             prob_not_get *= (1 - self.base_five_star_prob)
         
-        # 计算73-90抽的期望
         exp_during_pity = 0
         for i in range(self.step_up, self.step_end + 1):
             current_prob = self._calc_single_prob(i)
@@ -149,10 +148,22 @@ class GachaAnalysis:
             exp_during_pity += i * prob_get
             prob_not_get *= (1 - current_prob)
         
-        # 计算限定角色的期望（考虑大小保底）
-        basic_exp = exp_before_pity + exp_during_pity
-        return basic_exp * 1.5  # 考虑50/50的影响
-    
+        single_five_star_exp = exp_before_pity + exp_during_pity
+        
+        # 计算获得限定五星的期望
+        # 情况1：直接抽中限定（概率0.5）
+        p_direct = 0.5
+        exp_direct = single_five_star_exp
+        
+        # 情况2：先歪再保底（概率0.5）
+        p_guaranteed = 0.5
+        exp_guaranteed = single_five_star_exp * 2  # 需要抽两次五星
+        
+        # 总期望 = 各种情况的期望之和
+        total_exp = p_direct * exp_direct + p_guaranteed * exp_guaranteed
+        
+        return total_exp
+
     def prob_distribution_by_pulls(self) -> dict:
         """计算不同抽数获得限定五星的理论概率"""
         results = {}
@@ -346,7 +357,7 @@ if __name__ == "__main__":
         print(f"{pulls}抽: {prob:.2%}")
     
     print("\n=== 实验验证 ===")
-    experimental_data = analyzer.experimental_verification(1000000)
+    experimental_data = analyzer.experimental_verification(5000000)
     comparison = analyzer.compare_theory_and_practice(experimental_data)
     
     print("\n理论与实验对比：")
