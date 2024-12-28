@@ -111,7 +111,7 @@ class GachaSystem:
             )
         else:
             # 抽中三星
-            return GachaResult(ItemRarity.THREE_STAR, ItemType.STANDARD, "三星物品")
+            return GachaResult(ItemRarity.THREE_STAR, ItemType.STANDARD, self._get_random_item(ItemRarity.THREE_STAR, None))
 
     def pull_multi(self, times=10):
         return [self.pull() for _ in range(times)]

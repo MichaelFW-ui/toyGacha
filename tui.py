@@ -54,14 +54,26 @@ class GachaTUI:
             self.stdscr.clear()
             self.draw_frame()
 
+    def get_string_display_width(self, s: str) -> int:
+        """计算字符串显示宽度，中文字符计2，ASCII字符计1"""
+        width = 0
+        for char in s:
+            width += 2 if ord(char) > 255 else 1
+        return width
+
+    def get_centered_position(self, text: str, space_width: int) -> int:
+        """计算文字居中的起始位置"""
+        text_width = self.get_string_display_width(text)
+        return (space_width - text_width) // 2
+
     def display_result(self, result, position=None):
         max_y, max_x = self.stdscr.getmaxyx()
         box_width = 16
-        box_height = 5  # 增加高度
+        box_height = 5
         
         # 计算起始位置
         start_x = (max_x - box_width * 5) // 2
-        start_y = max_y // 2 - 4  # 调整起始位置
+        start_y = max_y // 2 - 4
         
         # 计算当前物品的位置
         row = position // 5 if position is not None else 0
@@ -78,10 +90,18 @@ class GachaTUI:
         
         # 显示结果
         self.stdscr.attron(curses.color_pair(color) | curses.A_BOLD)
-        name_text = result.item_name[:10]
+        
+        # 处理名称文本
+        name_text = result.item_name
+        while self.get_string_display_width(name_text) > box_width - 2:
+            name_text = name_text[:-1]
+        
+        name_x = x + self.get_centered_position(name_text, box_width)
         rarity_text = "★" * result.rarity.value
-        self.stdscr.addstr(y + 1, x + (box_width - len(name_text)) // 2, name_text)
-        self.stdscr.addstr(y + 2, x + (box_width - len(rarity_text)) // 2, rarity_text)
+        rarity_x = x + self.get_centered_position(rarity_text, box_width)
+        
+        self.stdscr.addstr(y + 1, name_x, name_text)
+        self.stdscr.addstr(y + 2, rarity_x, rarity_text)
         self.stdscr.attroff(curses.color_pair(color) | curses.A_BOLD)
         
         # 刷新屏幕
