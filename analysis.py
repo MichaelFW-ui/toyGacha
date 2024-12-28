@@ -190,51 +190,117 @@ class GachaAnalysis:
 
     def calculate_theoretical_rates(self) -> dict:
         """计算考虑保底机制的理论概率"""
-        # 使用动态规划计算五星的真实概率
-        dp = [[0.0 for _ in range(90)] for _ in range(1000)]  # 使用足够大的循环来达到稳态
-        dp[0][0] = 1.0  # 初始状态
+        # dp[i][j] 表示 (距离上次五星i抽，保底状态j) 的概率分布
+        # j=0表示小保底，j=1表示大保底
+        dp = [[0.0 for _ in range(2)] for _ in range(90)]
+        dp[0][0] = 1.0  # 初始状态：小保底
         
-        total_prob = 0
-        hits = 0
+        epsilon = 1e-10
+        max_iter = 1000
+        old_dp = [row[:] for row in dp]
         
-        # 模拟足够多次抽卡以达到稳态
-        for i in range(999):
-            for j in range(90):
-                if dp[i][j] == 0:
-                    continue
-                    
-                current_prob = self._calc_single_prob(j + 1)
-                # 没抽到五星
-                if j + 1 < 90:
-                    dp[i+1][j+1] += dp[i][j] * (1 - current_prob)
-                # 抽到五星，重置计数器
-                dp[i+1][0] += dp[i][j] * current_prob
+        for _ in range(max_iter):
+            new_dp = [[0.0 for _ in range(2)] for _ in range(90)]
+            
+            for i in range(90):
+                current_prob = self._calc_single_prob(i + 1)
+                for j in range(2):  # j是保底状态
+                    if dp[i][j] == 0:
+                        continue
+                        
+                    if i == 89:  # 89抽必定出金
+                        if j == 0:  # 小保底
+                            # 出限定，回到小保底
+                            new_dp[0][0] += dp[i][j] * 0.5
+                            # 出常驻，进入大保底
+                            new_dp[0][1] += dp[i][j] * 0.5
+                        else:  # 大保底
+                            # 必定出限定，回到小保底
+                            new_dp[0][0] += dp[i][j]
+                    else:
+                        # 不出金，距离+1，保底状态不变
+                        new_dp[i + 1][j] += dp[i][j] * (1 - current_prob)
+                        
+                        if j == 0:  # 小保底
+                            # 出限定，回到小保底
+                            new_dp[0][0] += dp[i][j] * current_prob * 0.5
+                            # 出常驻，进入大保底
+                            new_dp[0][1] += dp[i][j] * current_prob * 0.5
+                        else:  # 大保底
+                            # 必定出限定，回到小保底
+                            new_dp[0][0] += dp[i][j] * current_prob
+            
+            # 归一化
+            total = sum(sum(row) for row in new_dp)
+            if total > 0:
+                new_dp = [[p / total for p in row] for row in new_dp]
+            
+            # 检查收敛
+            if all(abs(a - b) < epsilon 
+                  for row1, row2 in zip(new_dp, old_dp) 
+                  for a, b in zip(row1, row2)):
+                dp = new_dp
+                break
                 
-                # 累积概率
-                total_prob += dp[i][j]
-                hits += dp[i][j] * current_prob
+            old_dp = [row[:] for row in new_dp]
+            dp = new_dp
         
-        # 计算真实的五星概率
-        real_five_star_rate = hits / total_prob
+        # 计算五星和限定五星的真实概率
+        total_five_star_rate = 0
+        limited_five_star_rate = 0
         
-        # 计算四星的真实概率（考虑被五星挤压和保底）
+        for i in range(90):
+            current_prob = self._calc_single_prob(i + 1)
+            # 小保底时的贡献
+            total_five_star_rate += dp[i][0] * current_prob
+            limited_five_star_rate += dp[i][0] * current_prob * 0.5
+            # 大保底时的贡献
+            total_five_star_rate += dp[i][1] * current_prob
+            limited_five_star_rate += dp[i][1] * current_prob  # 大保底必定是限定
+        
+        # 计算四星的真实概率（代码不变）
         real_four_star_rate = 0
-        for i in range(1, 11):
-            if i == 10:
-                # 第10抽保底
-                real_four_star_rate += (1 - real_five_star_rate)
-            else:
-                # 正常情况下的四星概率（考虑被五星挤压）
-                real_four_star_rate += max(min(1 - real_five_star_rate, self.base_four_star_prob), 0)
-        real_four_star_rate /= 10  # 取平均
+        four_star_dp = [0.0] * 10  # 四星保底的状态分布
+        four_star_dp[0] = 1.0
         
-        # 计算限定五星的理论概率（考虑大小保底）
-        real_limited_rate = real_five_star_rate * 0.75  # 考虑50/50和大保底的综合概率
+        # 计算四星的稳态分布
+        old_four_dp = four_star_dp.copy()
+        for _ in range(max_iter):
+            new_four_dp = [0.0] * 10
+            
+            for i in range(10):
+                if i == 9:  # 第9抽（第10次抽卡）
+                    new_four_dp[0] += four_star_dp[i]  # 必定四星
+                else:
+                    # 考虑五星挤压的四星概率
+                    effective_four_rate = max(min(1 - total_five_star_rate, self.base_four_star_prob), 0)
+                    # 没出四星
+                    new_four_dp[i + 1] += four_star_dp[i] * (1 - effective_four_rate)
+                    # 出四星
+                    new_four_dp[0] += four_star_dp[i] * effective_four_rate
+            
+            # 归一化
+            total = sum(new_four_dp)
+            if total > 0:
+                new_four_dp = [p / total for p in new_four_dp]
+            
+            # 检查收敛
+            if all(abs(a - b) < epsilon for a, b in zip(new_four_dp, old_four_dp)):
+                four_star_dp = new_four_dp
+                break
+                
+            old_four_dp = new_four_dp
+            four_star_dp = new_four_dp
+        
+        # 计算四星的真实概率
+        real_four_star_rate = sum(four_star_dp[i] * (1 if i == 9 else 
+            max(min(1 - total_five_star_rate, self.base_four_star_prob), 0)) 
+            for i in range(10))
         
         return {
-            'five_star_rate': real_five_star_rate,
+            'five_star_rate': total_five_star_rate,
             'four_star_rate': real_four_star_rate,
-            'limited_rate': real_limited_rate
+            'limited_rate': limited_five_star_rate
         }
 
     def compare_theory_and_practice(self, experimental_data: dict) -> dict:
