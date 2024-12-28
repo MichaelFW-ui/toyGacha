@@ -34,9 +34,19 @@ class GachaSystem:
         self.load_items()
     
     def load_items(self):
-        items_path = Path(__file__).parent / 'items.json'
-        with open(items_path, 'r', encoding='utf-8') as f:
-            self.items = json.load(f)
+        try:
+            items_path = Path(__file__).parent / 'items.json'
+            with open(items_path, 'r', encoding='utf-8') as f:
+                self.items = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            # 如果文件不存在或解析失败，使用默认物品名称
+            self.items = {
+                'limited_five_star': [f"限定五星角色"],
+                'five_star': [f"常驻五星角色_{i+1}" for i in range(3)],
+                'limited_four_star': [f"限定四星角色_{i+1}" for i in range(2)],
+                'four_star': [f"常驻四星角色_{i+1}" for i in range(4)],
+                'three_star': [f"三星物品_{i+1}" for i in range(3)]
+            }
 
     def _get_random_item(self, rarity: ItemRarity, item_type: ItemType) -> str:
         if rarity == ItemRarity.FIVE_STAR:
